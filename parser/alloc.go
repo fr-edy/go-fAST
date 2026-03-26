@@ -18,6 +18,9 @@ type nodeAllocator struct {
 	// contiguous slice allocations don't fragment with individual node allocs.
 	exprSlice miniArena[ast.Expression]
 	stmtSlice miniArena[ast.Statement]
+	declSlice miniArena[ast.VariableDeclarator]
+	propSlice miniArena[ast.Property]
+	elemSlice miniArena[ast.ClassElement]
 
 	// Concrete expression nodes.
 	ident     miniArena[ast.Identifier]
@@ -114,6 +117,9 @@ func newNodeAllocator() nodeAllocator {
 		// Slice backing arenas.
 		exprSlice: *newArena[ast.Expression](1024),
 		stmtSlice: *newArena[ast.Statement](1024),
+		declSlice: *newArena[ast.VariableDeclarator](128),
+		propSlice: *newArena[ast.Property](128),
+		elemSlice: *newArena[ast.ClassElement](32),
 
 		// Identifiers are the most frequent node.
 		ident: *newArena[ast.Identifier](1024),
@@ -240,6 +246,33 @@ func (a *nodeAllocator) CopyStatements(src []ast.Statement) ast.Statements {
 		return nil
 	}
 	dst := a.stmtSlice.makeSlice(len(src))
+	copy(dst, src)
+	return dst
+}
+
+func (a *nodeAllocator) CopyDeclarators(src []ast.VariableDeclarator) ast.VariableDeclarators {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := a.declSlice.makeSlice(len(src))
+	copy(dst, src)
+	return dst
+}
+
+func (a *nodeAllocator) CopyProperties(src []ast.Property) ast.Properties {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := a.propSlice.makeSlice(len(src))
+	copy(dst, src)
+	return dst
+}
+
+func (a *nodeAllocator) CopyElements(src []ast.ClassElement) ast.ClassElements {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := a.elemSlice.makeSlice(len(src))
 	copy(dst, src)
 	return dst
 }

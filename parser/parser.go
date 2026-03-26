@@ -149,46 +149,22 @@ func (p *parser) finishStmtBuf(mark int) ast.Statements {
 	return result
 }
 
-// finishPropBuf copies propBuf[mark:] into a heap-allocated Properties slice
-// and restores the scratch buffer to the saved mark.
 func (p *parser) finishPropBuf(mark int) ast.Properties {
-	src := p.propBuf[mark:]
-	if len(src) == 0 {
-		p.propBuf = p.propBuf[:mark]
-		return nil
-	}
-	dst := make(ast.Properties, len(src))
-	copy(dst, src)
+	result := p.alloc.CopyProperties(p.propBuf[mark:])
 	p.propBuf = p.propBuf[:mark]
-	return dst
+	return result
 }
 
-// finishDeclBuf copies declBuf[mark:] into a heap-allocated VariableDeclarators slice
-// and restores the scratch buffer to the saved mark.
 func (p *parser) finishDeclBuf(mark int) ast.VariableDeclarators {
-	src := p.declBuf[mark:]
-	if len(src) == 0 {
-		p.declBuf = p.declBuf[:mark]
-		return nil
-	}
-	dst := make(ast.VariableDeclarators, len(src))
-	copy(dst, src)
+	result := p.alloc.CopyDeclarators(p.declBuf[mark:])
 	p.declBuf = p.declBuf[:mark]
-	return dst
+	return result
 }
 
-// finishElemBuf copies elemBuf[mark:] into a heap-allocated ClassElements slice
-// and restores the scratch buffer to the saved mark.
 func (p *parser) finishElemBuf(mark int) ast.ClassElements {
-	src := p.elemBuf[mark:]
-	if len(src) == 0 {
-		p.elemBuf = p.elemBuf[:mark]
-		return nil
-	}
-	dst := make(ast.ClassElements, len(src))
-	copy(dst, src)
+	result := p.alloc.CopyElements(p.elemBuf[mark:])
 	p.elemBuf = p.elemBuf[:mark]
-	return dst
+	return result
 }
 
 func (p *parser) expect(value token.Token) ast.Idx {

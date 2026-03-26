@@ -103,7 +103,7 @@ func (p *parser) parseSuperProperty() ast.Expr {
 	case token.LeftParenthesis:
 		return p.parseCallExpression(p.alloc.SuperExpression(idx))
 	default:
-		p.errorf("'super' keyword unexpected here")
+		p.error(errSuperUnexpected)
 		p.nextStatement()
 		return p.alloc.InvalidExpression(idx, p.currentOffset())
 	}
@@ -120,7 +120,7 @@ func (p *parser) reinterpretSequenceAsArrowFuncParams(list ast.Expressions) ast.
 			}
 		}
 		if firstRestIdx != -1 {
-			p.errorf("Rest parameter must be last formal parameter")
+			p.error(errRestParamLast)
 			p.declBuf = p.declBuf[:mark]
 			return ast.ParameterList{}
 		}
@@ -375,11 +375,11 @@ func (p *parser) parseMethodDefinition(keyStartIdx ast.Idx, kind ast.PropertyKin
 	switch kind {
 	case ast.PropertyKindGet:
 		if len(parameterList.List) > 0 || parameterList.Rest != nil {
-			p.errorf("Getter must not have any formal parameters.")
+			p.error(errGetterParams)
 		}
 	case ast.PropertyKindSet:
 		if len(parameterList.List) != 1 || parameterList.Rest != nil {
-			p.errorf("Setter must have exactly one formal parameter.")
+			p.error(errSetterParams)
 		}
 	}
 	node := p.alloc.FunctionLiteral(keyStartIdx, async)
@@ -623,7 +623,7 @@ L:
 			left = p.parseCallExpression(left)
 		case token.NoSubstitutionTemplate, token.TemplateHead:
 			if optionalChain {
-				p.errorf("Invalid template literal on optional chain")
+				p.error(errInvalidTemplateLiteralOnOptionalChain)
 				p.nextStatement()
 				p.scope.allowIn = allowIn
 				return p.alloc.InvalidExpression(start, p.currentOffset())
@@ -661,7 +661,7 @@ func (p *parser) parseUpdateExpression() ast.Expr {
 		switch operand.(type) {
 		case *ast.Identifier, *ast.PrivateDotExpression, *ast.MemberExpression:
 		default:
-			p.errorf("Invalid left-hand side in assignment")
+			p.error(errInvalidLHSAssignment)
 			p.nextStatement()
 			return p.alloc.InvalidExpression(idx, p.currentOffset())
 		}
@@ -669,7 +669,6 @@ func (p *parser) parseUpdateExpression() ast.Expr {
 	default:
 		operand := p.parseLeftHandSideExpressionAllowCall()
 		if p.currentKind() == token.Increment || p.currentKind() == token.Decrement {
-			// Make sure there is no line terminator here
 			if p.scanner.Token.OnNewLine {
 				return operand
 			}
@@ -679,7 +678,7 @@ func (p *parser) parseUpdateExpression() ast.Expr {
 			switch operand.(type) {
 			case *ast.Identifier, *ast.PrivateDotExpression, *ast.MemberExpression:
 			default:
-				p.errorf("Invalid left-hand side in assignment")
+				p.error(errInvalidLHSAssignment)
 				p.nextStatement()
 				return p.alloc.InvalidExpression(idx, p.currentOffset())
 			}
@@ -707,7 +706,7 @@ func (p *parser) parseUnaryExpression() ast.Expr {
 				return p.alloc.InvalidExpression(idx, p.currentOffset())
 			}
 			if p.scope.inFuncParams {
-				p.errorf("Illegal await-expression in formal parameters of async function")
+				p.error(errIllegalAwaitInParams)
 			}
 			return p.alloc.AwaitExpression(idx, p.alloc.Expression(p.parseUnaryExpression()))
 		}
@@ -771,23 +770,21 @@ func (p *parser) parseBinaryExpressionRest(lhs ast.Expr, lhsParenthesized bool, 
 		rhs := p.parseBinaryExpressionOrHigher(lbp ^ 1)
 
 		if isLogicalOperator(kind) {
-			// Mixed coalesce check: ?? cannot be mixed with && or || without parentheses.
 			if kind == token.Coalesce {
 				if bexp, isBin := rhs.(*ast.BinaryExpression); isBin && !rhsParenthesized &&
 					(bexp.Operator == token.LogicalAnd || bexp.Operator == token.LogicalOr) {
-					p.errorf("Logical expressions and coalesce expressions cannot be mixed. Wrap either by parentheses")
+					p.error(errMixedLogicalCoalesce)
 				}
 				if bexp, isBin := lhs.(*ast.BinaryExpression); isBin && !lhsParenthesized &&
 					(bexp.Operator == token.LogicalAnd || bexp.Operator == token.LogicalOr) {
-					p.errorf("Logical expressions and coalesce expressions cannot be mixed. Wrap either by parentheses")
+					p.error(errMixedLogicalCoalesce)
 				}
 			}
 		} else {
-			// Check for unparenthesized unary/await before **
 			if kind == token.Exponent && !lhsParenthesized {
 				switch lhs.(type) {
 				case *ast.UnaryExpression, *ast.AwaitExpression:
-					p.errorf("Unary operator used immediately before exponentiation expression. Parenthesis must be used to disambiguate operator precedence")
+					p.error(errExponentUnary)
 				}
 			}
 		}
@@ -933,7 +930,7 @@ func (p *parser) parseAssignmentExpression() *ast.Expression {
 				paramList = &paramL
 			}
 			if paramList == nil {
-				p.errorf("Malformed arrow function parameter list")
+				p.error(errMalformedArrowParams)
 				p.scope.allowAwait = savedAwait
 				return p.alloc.Expression(p.alloc.InvalidExpression(left.Idx0(), left.Idx1()))
 			}
@@ -942,7 +939,7 @@ func (p *parser) parseAssignmentExpression() *ast.Expression {
 			return result
 		}
 		if paramList == nil {
-			p.errorf("Malformed arrow function parameter list")
+			p.error(errMalformedArrowParams)
 			return p.alloc.Expression(p.alloc.InvalidExpression(left.Idx0(), left.Idx1()))
 		}
 		return p.alloc.Expression(p.parseArrowFunction(start, *paramList, async))
@@ -969,7 +966,7 @@ func (p *parser) parseAssignmentExpression() *ast.Expression {
 		if ok {
 			return p.alloc.Expression(p.alloc.AssignExpression(operator, p.alloc.Expression(left), p.parseAssignmentExpression()))
 		}
-		p.errorf("Invalid left-hand side in assignment")
+		p.error(errInvalidLHSAssignment)
 		p.nextStatement()
 		return p.alloc.Expression(p.alloc.InvalidExpression(idx, p.currentOffset()))
 	}
@@ -981,7 +978,7 @@ func (p *parser) parseYieldExpression() *ast.YieldExpression {
 	idx := p.expect(token.Yield)
 
 	if p.scope.inFuncParams {
-		p.errorf("Yield expression not allowed in formal parameter")
+		p.error(errYieldInParams)
 	}
 
 	node := p.alloc.YieldExpression(idx)
@@ -1025,7 +1022,7 @@ func (p *parser) parseExpression() *ast.Expression {
 
 func (p *parser) checkComma(from, to ast.Idx) {
 	if pos := strings.IndexByte(p.str[int(from)-1:int(to)-1], ','); pos >= 0 {
-		p.errorf("Comma is not allowed here")
+		p.error(errCommaNotAllowed)
 	}
 }
 
@@ -1035,7 +1032,7 @@ func (p *parser) reinterpretAsArrayAssignmentPattern(left *ast.ArrayLiteral) ast
 	for i, item := range value {
 		if spread, ok := item.Expr.(*ast.SpreadElement); ok {
 			if i != len(value)-1 {
-				p.errorf("Rest element must be last element")
+				p.error(errRestElementLast)
 				return p.alloc.InvalidExpression(left.Idx0(), left.Idx1())
 			}
 			p.checkComma(spread.Idx1(), left.RightBracket)
@@ -1064,7 +1061,7 @@ func (p *parser) reinterpretAsArrayBindingPattern(left *ast.ArrayLiteral) ast.Ta
 	for i, item := range value {
 		if spread, ok := item.Expr.(*ast.SpreadElement); ok {
 			if i != len(value)-1 {
-				p.errorf("Rest element must be last element")
+				p.error(errRestElementLast)
 				return p.alloc.InvalidExpression(left.Idx0(), left.Idx1())
 			}
 			p.checkComma(spread.Idx1(), left.RightBracket)
@@ -1112,7 +1109,7 @@ func (p *parser) reinterpretAsObjectBindingPattern(expr *ast.ObjectLiteral) ast.
 			ok = true
 		case *ast.SpreadElement:
 			if i != len(expr.Value)-1 {
-				p.errorf("Rest element must be last element")
+				p.error(errRestElementLast)
 				return p.alloc.InvalidExpression(expr.Idx0(), expr.Idx1())
 			}
 			// TODO make sure there is no trailing comma
@@ -1121,7 +1118,7 @@ func (p *parser) reinterpretAsObjectBindingPattern(expr *ast.ObjectLiteral) ast.
 			ok = true
 		}
 		if !ok {
-			p.errorf("Invalid destructuring binding target")
+			p.error(errInvalidDestructuringBinding)
 			return p.alloc.InvalidExpression(expr.Idx0(), expr.Idx1())
 		}
 	}
@@ -1143,7 +1140,7 @@ func (p *parser) reinterpretAsObjectAssignmentPattern(l *ast.ObjectLiteral) ast.
 			ok = true
 		case *ast.SpreadElement:
 			if i != len(l.Value)-1 {
-				p.errorf("Rest element must be last element")
+				p.error(errRestElementLast)
 				return p.alloc.InvalidExpression(l.Idx0(), l.Idx1())
 			}
 			// TODO make sure there is no trailing comma
@@ -1152,7 +1149,7 @@ func (p *parser) reinterpretAsObjectAssignmentPattern(l *ast.ObjectLiteral) ast.
 			ok = true
 		}
 		if !ok {
-			p.errorf("Invalid destructuring assignment target")
+			p.error(errInvalidDestructuringAssignment)
 			return p.alloc.InvalidExpression(l.Idx0(), l.Idx1())
 		}
 	}
@@ -1166,7 +1163,7 @@ func (p *parser) reinterpretAsAssignmentElement(expr ast.Expr) ast.Expr {
 			expr.Left = p.alloc.Expression(p.reinterpretAsDestructAssignTarget(expr.Left.Expr))
 			return expr
 		} else {
-			p.errorf("Invalid destructuring assignment target")
+			p.error(errInvalidDestructuringAssignment)
 			return p.alloc.InvalidExpression(expr.Idx0(), expr.Idx1())
 		}
 	default:
@@ -1181,7 +1178,7 @@ func (p *parser) reinterpretAsBindingElement(expr ast.Expr) ast.Expr {
 			expr.Left = p.alloc.Expression(p.reinterpretAsDestructBindingTarget(expr.Left.Expr))
 			return expr
 		} else {
-			p.errorf("Invalid destructuring assignment target")
+			p.error(errInvalidDestructuringAssignment)
 			return p.alloc.InvalidExpression(expr.Idx0(), expr.Idx1())
 		}
 	default:
@@ -1198,7 +1195,7 @@ func (p *parser) reinterpretAsBinding(expr ast.Expr) ast.VariableDeclarator {
 				Initializer: expr.Right,
 			}
 		} else {
-			p.errorf("Invalid destructuring assignment target")
+			p.error(errInvalidDestructuringAssignment)
 			return ast.VariableDeclarator{
 				Target: p.alloc.BindingTarget(p.alloc.InvalidExpression(expr.Idx0(), expr.Idx1())),
 			}
@@ -1221,7 +1218,7 @@ func (p *parser) reinterpretAsDestructAssignTarget(item ast.Expr) ast.Expr {
 	case ast.Pattern, *ast.Identifier, *ast.PrivateDotExpression, *ast.MemberExpression:
 		return item
 	}
-	p.errorf("Invalid destructuring assignment target")
+	p.error(errInvalidDestructuringAssignment)
 	return p.alloc.InvalidExpression(item.Idx0(), item.Idx1())
 }
 
@@ -1242,7 +1239,7 @@ func (p *parser) reinterpretAsDestructBindingTarget(item ast.Expr) ast.Target {
 			return item
 		}
 	}
-	p.errorf("Invalid destructuring binding target")
+	p.error(errInvalidDestructuringBinding)
 	return p.alloc.InvalidExpression(item.Idx0(), item.Idx1())
 }
 
@@ -1250,6 +1247,6 @@ func (p *parser) reinterpretAsBindingRestElement(expr ast.Expr) ast.Expr {
 	if _, ok := expr.(*ast.Identifier); ok {
 		return expr
 	}
-	p.errorf("Invalid binding rest")
+	p.error(errInvalidBindingRest)
 	return p.alloc.InvalidExpression(expr.Idx0(), expr.Idx1())
 }

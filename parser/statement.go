@@ -129,7 +129,7 @@ func (p *parser) parseTryStatement() ast.Stmt {
 	}
 
 	if node.Catch == nil && node.Finally == nil {
-		p.errorf("Missing catch or finally after try")
+		p.error(errMissingCatchOrFinally)
 		return p.alloc.BadStatement(node.Try, node.Body.Idx1())
 	}
 
@@ -339,7 +339,7 @@ func (p *parser) parseClass(declaration bool) *ast.ClassLiteral {
 		_, private := value.(*ast.PrivateIdentifier)
 
 		if static && !private && keyName == "prototype" {
-			p.errorf("Classes may not have a static property named 'prototype'")
+			p.error(errStaticPrototype)
 		}
 
 		if kind == "" && p.currentKind() == token.LeftParenthesis {
@@ -351,14 +351,14 @@ func (p *parser) parseClass(declaration bool) *ast.ClassLiteral {
 			if keyName == "constructor" && !computed {
 				if !static {
 					if kind != ast.PropertyKindMethod {
-						p.errorf("Class constructor may not be an accessor")
+						p.error(errConstructorAccessor)
 					} else if async {
-						p.errorf("Class constructor may not be an async method")
+						p.error(errConstructorAsync)
 					} else if generator {
-						p.errorf("Class constructor may not be a generator")
+						p.error(errConstructorGenerator)
 					}
 				} else if private {
-					p.errorf("Class constructor may not be a private method")
+					p.error(errConstructorPrivate)
 				}
 			}
 			md := p.alloc.MethodDefinition(start, p.alloc.Expression(value), kind,
@@ -374,7 +374,7 @@ func (p *parser) parseClass(declaration bool) *ast.ClassLiteral {
 				}
 			}
 			if isCtor {
-				p.errorf("Classes may not have a field named 'constructor'")
+				p.error(errFieldConstructor)
 			}
 			var initializer *ast.Expression
 			if p.currentKind() == token.Assign {
@@ -408,7 +408,7 @@ func (p *parser) parseReturnStatement() ast.Stmt {
 	idx := p.expect(token.Return)
 
 	if !p.scope.inFunction {
-		p.errorf("Illegal return statement")
+		p.error(errIllegalReturn)
 		p.nextStatement()
 		return p.alloc.BadStatement(idx, p.currentOffset())
 	}
@@ -428,7 +428,7 @@ func (p *parser) parseThrowStatement() ast.Stmt {
 	idx := p.expect(token.Throw)
 
 	if p.scanner.Token.OnNewLine {
-		p.errorf("Illegal newline after throw")
+		p.error(errIllegalNewlineAfterThrow)
 		p.nextStatement()
 		return p.alloc.BadStatement(idx, p.currentOffset())
 	}
@@ -459,7 +459,7 @@ func (p *parser) parseSwitchStatement() ast.Stmt {
 		clause := p.parseCaseStatement()
 		if clause.Test == nil {
 			if node.Default != -1 {
-				p.errorf("Already saw a default in switch")
+				p.error(errDuplicateDefault)
 			}
 			node.Default = index
 		}
@@ -590,7 +590,7 @@ func (p *parser) parseForOrForInStatement() *ast.Statement {
 			}
 			if forIn || forOf {
 				if list[0].Initializer != nil {
-					p.errorf("for-in loop variable declaration may not have an initializer")
+					p.error(errForInInitializer)
 				}
 				into = p.alloc.ForIntoPtr(p.alloc.VariableDeclaration(0, tok, ast.VariableDeclarators{list[0]}))
 			} else {
@@ -616,7 +616,7 @@ func (p *parser) parseForOrForInStatement() *ast.Statement {
 				case *ast.ArrayLiteral:
 					exprNode.Expr = p.reinterpretAsArrayAssignmentPattern(e)
 				default:
-					p.errorf("Invalid left-hand side in for-in or for-of")
+					p.error(errInvalidLHSForIn)
 					p.nextStatement()
 					return p.alloc.Statement(p.alloc.BadStatement(idx, p.currentOffset()))
 				}
@@ -643,7 +643,7 @@ func (p *parser) ensurePatternInit(list []ast.VariableDeclarator) {
 	for _, item := range list {
 		if _, ok := item.Target.Target.(ast.Pattern); ok {
 			if item.Initializer == nil {
-				p.errorf("Missing initializer in destructuring declaration")
+				p.error(errMissingDestructuringInit)
 				break
 			}
 		}
@@ -653,7 +653,7 @@ func (p *parser) ensurePatternInit(list []ast.VariableDeclarator) {
 func (p *parser) parseLexicalDeclaration(tok token.Token) *ast.VariableDeclaration {
 	idx := p.expect(tok)
 	if !p.scope.allowLet && tok != token.Var {
-		p.errorf("Lexical declaration cannot appear in a single-statement context")
+		p.error(errLexicalSingleStatement)
 	}
 
 	list := p.parseVariableDeclarationList()
@@ -763,7 +763,7 @@ func (p *parser) parseBreakStatement() ast.Stmt {
 	p.expect(token.Identifier)
 
 illegal:
-	p.errorf("Illegal break statement")
+	p.error(errIllegalBreak)
 	p.nextStatement()
 	return p.alloc.BadStatement(idx, p.currentOffset())
 }
@@ -798,7 +798,7 @@ func (p *parser) parseContinueStatement() ast.Stmt {
 	p.expect(token.Identifier)
 
 illegal:
-	p.errorf("Illegal continue statement")
+	p.error(errIllegalContinue)
 	p.nextStatement()
 	return p.alloc.BadStatement(idx, p.currentOffset())
 }

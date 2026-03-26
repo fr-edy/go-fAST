@@ -20,11 +20,13 @@ func newArena[T any](startLen int) *miniArena[T] {
 	return &miniArena[T]{
 		elementSize: unsafe.Sizeof(t),
 		len:         uintptr(startLen),
-		a:           unsafe.Pointer(&make([]T, startLen)[0]),
 	}
 }
 
 func (a *miniArena[T]) make() *T {
+	if a.a == nil {
+		a.a = unsafe.Pointer(&make([]T, a.len)[0])
+	}
 	n := (*T)(unsafe.Add(a.a, a.index*a.elementSize))
 	if a.index++; a.index == a.len {
 		a.resize()
@@ -51,6 +53,8 @@ func (a *miniArena[T]) makeSlice(n int) []T {
 	un := uintptr(n)
 	if a.index+un > a.len {
 		a.growForSlice(un)
+	} else if a.a == nil {
+		a.a = unsafe.Pointer(&make([]T, a.len)[0])
 	}
 	start := unsafe.Add(a.a, a.index*a.elementSize)
 	a.index += un
