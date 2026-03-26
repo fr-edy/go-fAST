@@ -1,6 +1,7 @@
 package parser_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -143,5 +144,23 @@ func BenchmarkGenerateLarge(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		_ = generator.Generate(p)
+	}
+}
+
+var jqueryJS string
+
+func init() {
+	data, err := os.ReadFile("/tmp/jquery.js")
+	if err == nil {
+		jqueryJS = string(data)
+	}
+}
+
+func BenchmarkParseJQuery(b *testing.B) {
+	if jqueryJS == "" {
+		b.Skip("jquery.js not found at /tmp/jquery.js")
+	}
+	for b.Loop() {
+		_, _ = parser.ParseFile(jqueryJS)
 	}
 }

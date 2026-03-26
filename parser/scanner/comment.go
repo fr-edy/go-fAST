@@ -1,8 +1,10 @@
 package scanner
 
 import (
-	"github.com/t14raptor/go-fast/ast"
 	"strings"
+	"unsafe"
+
+	"github.com/t14raptor/go-fast/ast"
 )
 
 func isLineTerminator(chr rune) bool {
@@ -38,98 +40,85 @@ func init() {
 // skipSingleLineComment skips a single-line comment (// already consumed).
 // Does NOT consume the line terminator.
 func (s *Scanner) skipSingleLineComment() {
-	for {
-		b, ok := s.PeekByte()
-		if !ok {
-			// EOF - end of comment
-			return
-		}
+	pos := s.src.pos
+	base := s.src.base
+	end := s.src.len
 
+	for pos < end {
+		b := *(*byte)(unsafe.Add(base, pos))
 		if !lineBreakTable[b] {
-			// Regular character - advance past it.
-			s.src.NextByteUnchecked()
+			pos++
 			continue
 		}
 
 		if b != lsOrPsFirst {
-			// '\r' or '\n' - end of comment (don't consume the line break)
+			s.src.pos = pos
 			return
 		}
 
-		// 0xE2: Could be first byte of LS/PS, or some other Unicode char.
-		// Consume the 0xE2 first, then check next 2 bytes.
-		s.ConsumeByte()
+		s.src.pos = pos + 1
 		twoMore, ok := s.src.PeekTwoBytes()
 		if !ok {
-			// Not enough bytes - treat as regular char, continue
+			pos = s.src.pos
 			continue
 		}
 		if twoMore == lsBytes2And3 || twoMore == psBytes2And3 {
-			// LS or PS - end of comment.
-			// Back up to the start of the 3-byte LS/PS char so the main loop handles it.
-			s.src.SetPosition(s.src.Offset() - 1)
+			s.src.pos = pos
 			return
 		}
-		// Some other Unicode char starting with 0xE2 (always 3 bytes).
-		// Skip remaining 2 bytes.
-		s.ConsumeByte()
-		s.ConsumeByte()
+		s.src.pos += 2
+		pos = s.src.pos
 	}
+	s.src.pos = pos
 }
 
 // skipMultiLineComment skips a multi-line comment (/* already consumed).
 // Sets s.Token.OnNewLine if the comment contains a line terminator.
 // After finding a line break, switches to a faster path that only looks for `*/`.
 func (s *Scanner) skipMultiLineComment() {
-	for {
-		b, ok := s.PeekByte()
-		if !ok {
-			// Unterminated multi-line comment
-			s.error(unterminatedMultiLineComment(s.unterminatedRange()))
-			return
-		}
+	pos := s.src.pos
+	base := s.src.base
+	end := s.src.len
 
+	for pos < end {
+		b := *(*byte)(unsafe.Add(base, pos))
 		if !multiLineCommentTable[b] {
-			// Regular character - advance past it
-			s.src.NextByteUnchecked()
+			pos++
 			continue
 		}
 
 		switch b {
 		case '*':
-			s.ConsumeByte()
-			if s.AdvanceIfByteEquals('/') {
-				// Found */ - end of comment
+			pos++
+			if pos < end && *(*byte)(unsafe.Add(base, pos)) == '/' {
+				s.src.pos = pos + 1
 				return
 			}
-		case lsOrPsFirst:
-			// 0xE2: Could be first byte of LS/PS or other Unicode char.
-			s.ConsumeByte()
+		case '\r', '\n':
+			s.Token.OnNewLine = true
+			s.src.pos = pos + 1
+			s.skipMultiLineCommentAfterLineBreak()
+			return
+		default:
+			pos++
+			s.src.pos = pos
 			twoMore, ok := s.src.PeekTwoBytes()
 			if !ok {
+				pos = s.src.pos
 				continue
 			}
 			if twoMore == lsBytes2And3 || twoMore == psBytes2And3 {
-				// LS or PS line terminator
 				s.Token.OnNewLine = true
-				s.ConsumeByte()
-				s.ConsumeByte()
-				// Ideally we'd switch to the fast path here, but irregular
-				// line breaks are rare, so just continue the main loop.
+				s.src.pos += 2
 			} else {
-				// Other Unicode char, skip remaining 2 bytes of 3-byte sequence
-				s.ConsumeByte()
-				s.ConsumeByte()
+				s.src.pos += 2
 			}
-		default:
-			// '\r' or '\n' - regular line break
-			s.Token.OnNewLine = true
-			s.ConsumeByte()
-			// Switch to faster search that only looks for `*/`.
-			s.skipMultiLineCommentAfterLineBreak()
-			return
+			pos = s.src.pos
 		}
 	}
+
+	s.src.pos = pos
+	s.error(unterminatedMultiLineComment(s.unterminatedRange()))
 }
 
 // skipMultiLineCommentAfterLineBreak is the fast path for multi-line comment scanning
