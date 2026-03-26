@@ -40,10 +40,20 @@ func (g *GenVisitor) line() {
 	g.out.WriteString("\n")
 }
 
+var indentCache [17]string
+
+func init() {
+	for i := range indentCache {
+		indentCache[i] = strings.Repeat("    ", i)
+	}
+}
+
 func (g *GenVisitor) lineAndPad() {
 	g.line()
-	for i := 0; i < g.indent; i++ {
-		g.out.WriteString("    ")
+	if g.indent < len(indentCache) {
+		g.out.WriteString(indentCache[g.indent])
+	} else {
+		g.out.WriteString(strings.Repeat("    ", g.indent))
 	}
 }
 
@@ -384,8 +394,8 @@ func (g *GenVisitor) VisitForInto(n *ast.ForInto) {
 
 func (g *GenVisitor) VisitParameterList(n *ast.ParameterList) {
 	g.out.WriteString("(")
-	for i, p := range n.List {
-		g.gen(&p)
+	for i := range n.List {
+		g.gen(&n.List[i])
 		if i < len(n.List)-1 {
 			g.out.WriteString(", ")
 		}
@@ -593,9 +603,9 @@ func (g *GenVisitor) VisitSwitchStatement(n *ast.SwitchStatement) {
 	g.out.WriteString(") {")
 
 	g.indent++
-	for _, c := range n.Body {
+	for i := range n.Body {
 		g.lineAndPad()
-		g.gen(&c)
+		g.gen(&n.Body[i])
 	}
 	g.indent--
 
@@ -721,8 +731,8 @@ func (g *GenVisitor) VisitTemplateLiteral(n *ast.TemplateLiteral) {
 func (g *GenVisitor) VisitVariableDeclaration(n *ast.VariableDeclaration) {
 	g.out.WriteString(n.Token.String())
 	g.out.WriteString(" ")
-	for i, b := range n.List {
-		g.gen(&b)
+	for i := range n.List {
+		g.gen(&n.List[i])
 		if i < len(n.List)-1 {
 			g.out.WriteString(", ")
 		}
@@ -730,7 +740,8 @@ func (g *GenVisitor) VisitVariableDeclaration(n *ast.VariableDeclaration) {
 
 	g.out.WriteString(";")
 	if len(n.Comment) > 0 {
-		g.out.WriteString(" // " + n.Comment)
+		g.out.WriteString(" // ")
+		g.out.WriteString(n.Comment)
 	}
 }
 

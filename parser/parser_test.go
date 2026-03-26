@@ -1792,12 +1792,12 @@ func TestBareOfIdentifierParses(t *testing.T) {
 func TestForOfWithIdentifierNamedOfParses(t *testing.T) {
 	p := mustParse(t, "for (let of of arr) {}")
 	forOf := firstStmt(p, 0).(*ast.ForOfStatement)
-	into := forOf.Into.Unwrap().(*ast.VariableDeclaration)
-	binding := into.List[0].Target.Unwrap().(*ast.Identifier)
+	into := forOf.Into.Into.(*ast.VariableDeclaration)
+	binding := into.List[0].Target.Target.(*ast.Identifier)
 	if binding.Name != "of" {
 		t.Fatalf("loop binding = %q; want of", binding.Name)
 	}
-	if id := forOf.Source.MustIdent(); id.Name != "arr" {
+	if id := forOf.Source.Expr.(*ast.Identifier); id.Name != "arr" {
 		t.Errorf("source = %q; want arr", id.Name)
 	}
 }
