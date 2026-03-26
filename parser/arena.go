@@ -60,10 +60,6 @@ func (a *miniArena[T]) makeSlice(n int) []T {
 	return unsafe.Slice((*T)(start), n)
 }
 
-// growForSlice allocates a new chunk large enough to hold at least minElems
-// contiguous elements. Kept out-of-line so the fast path in makeSlice has
-// no write barriers or float conversions.
-//
 //go:noinline
 func (a *miniArena[T]) growForSlice(minElems uintptr) {
 	newLen := a.len + a.len>>1 // 1.5x growth, integer math

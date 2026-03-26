@@ -4,17 +4,33 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/t14raptor/go-fast/ast"
 	"github.com/t14raptor/go-fast/token"
 )
 
+var genPool = sync.Pool{
+	New: func() any {
+		return &GenVisitor{}
+	},
+}
+
 func Generate(node ast.VisitableNode) string {
-	g := &GenVisitor{}
+	g := genPool.Get().(*GenVisitor)
 	g.V = g
+	g.indent = 0
+	g.p = nil
+	g.s = nil
+	if g.out.Cap() == 0 {
+		g.out.Grow(4096)
+	}
 	g.gen(node)
-	return g.out.String()
+	result := g.out.String()
+	g.out.Reset()
+	genPool.Put(g)
+	return result
 }
 
 type GenVisitor struct {

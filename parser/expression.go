@@ -163,7 +163,7 @@ func (p *parser) parseParenthesisedExpression() ast.Expr {
 	}
 	p.expect(token.RightParenthesis)
 	n := len(p.exprBuf) - mark
-	if n == 1 && p.errors == nil {
+	if n == 1 && len(p.errs) == 0 {
 		result := p.exprBuf[mark].Expr
 		p.exprBuf = p.exprBuf[:mark]
 		return result
@@ -912,7 +912,7 @@ func (p *parser) parseAssignmentExpression() *ast.Expression {
 				}},
 			}
 		} else if parenthesis {
-			if seq, ok := left.(*ast.SequenceExpression); ok && p.errors == nil {
+			if seq, ok := left.(*ast.SequenceExpression); ok && len(p.errs) == 0 {
 				paramL := p.reinterpretSequenceAsArrowFuncParams(seq.Sequence)
 				paramList = &paramL
 			} else {

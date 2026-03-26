@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"errors"
+
 	"github.com/t14raptor/go-fast/ast"
 	"github.com/t14raptor/go-fast/parser/scanner"
 	"github.com/t14raptor/go-fast/token"
@@ -14,7 +16,8 @@ type parser struct {
 
 	scope *scope
 
-	errors  error
+	scanErr error
+	errs    []error
 	recover struct {
 		// Scratch when trying to seek to the next statement, etc.
 		idx   ast.Idx
@@ -34,19 +37,19 @@ type parser struct {
 	declBuf []ast.VariableDeclarator
 }
 
-// newParser ...
 func newParser(src string) *parser {
 	p := &parser{
 		str: src,
 
 		alloc:   newNodeAllocator(),
+		errs:    make([]error, 0, 8),
 		exprBuf: make([]ast.Expression, 0, 64),
 		stmtBuf: make([]ast.Statement, 0, 64),
 		propBuf: make([]ast.Property, 0, 16),
 		elemBuf: make([]ast.ClassElement, 0, 16),
 		declBuf: make([]ast.VariableDeclarator, 0, 16),
 	}
-	p.scanner = scanner.NewScanner(src, &p.errors)
+	p.scanner = scanner.NewScanner(src, &p.scanErr)
 	return p
 }
 
@@ -62,7 +65,10 @@ func (p *parser) parse() (*ast.Program, error) {
 	p.next()
 	program := p.parseProgram()
 	p.closeScope()
-	return program, p.errors
+	if p.scanErr != nil {
+		p.errs = append(p.errs, p.scanErr)
+	}
+	return program, errors.Join(p.errs...)
 }
 
 // next ...
@@ -71,22 +77,20 @@ func (p *parser) next() {
 }
 
 type parserState struct {
-	c scanner.Checkpoint
-
-	errors error
+	c      scanner.Checkpoint
+	errLen int
 }
 
 func (p *parser) mark() parserState {
 	return parserState{
 		c:      p.scanner.Checkpoint(),
-		errors: p.errors,
+		errLen: len(p.errs),
 	}
 }
 
 func (p *parser) restore(state parserState) {
 	p.scanner.Rewind(state.c)
-	// Truncate parser errors back to checkpoint state
-	p.errors = state.errors
+	p.errs = p.errs[:state.errLen]
 }
 
 func (p *parser) peek() scanner.Token {

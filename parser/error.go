@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"errors"
 	"fmt"
 	"github.com/t14raptor/go-fast/token"
 )
@@ -11,10 +10,9 @@ const (
 	errUnexpectedEndOfInput = "Unexpected end of input"
 )
 
-// errorf ...
 func (p *parser) errorf(msg string, msgValues ...any) error {
 	err := fmt.Errorf(msg, msgValues...)
-	p.errors = errors.Join(p.errors, err)
+	p.errs = append(p.errs, err)
 	return err
 }
 
